@@ -1,67 +1,153 @@
-loadstring(game:HttpGet("https://raw.githubusercontent.com/caomod2077/Script/refs/heads/main/Farm%20Diamond%20v2.lua"))()
--- ⚡ Script local para ocultar cadáveres cercanos y reconectar si hay error
--- Hecho para Boblox (cliente local)
+-- ============================
+-- WRAPPER: ejecutar tu loadstring + ocultado visual cercano + autoreconnect
+-- Pega tu loadstring (o la llamada a loadstring) en ORIGINAL_LOADSTRING
+-- ============================
 
--- CONFIG
-local RADIO = 120 -- distancia máxima para ocultar cosas (studs)
+-- ======= CONFIG =======
+local RADIO = 120 -- studs: rango alrededor de tu HumanoidRootPart donde actuará
+local WAIT_BEFORE_RUN = 4 -- segundos de espera al entrar para que todo cargue
+local HIDE_PATTERNS = { "corpse", "dead", "ragdoll", "body", "cadaver" } -- nombres sospechosos
+-- ======================
 
--- Función para calcular distancia
-local function distancia(a, b)
-    return (a - b).Magnitude
+-- === Pega tu loadstring aquí ===
+local ORIGINAL_LOADSTRING = [[
+-- <<< Pega aquí tu loadstring completo (sin loadstring(...) alrededor) >>>
+-- Por ejemplo: getgenv().autofarm = true; -- etc
+]]
+-- === fin original ===
+
+-- utilidad: buscar patrones
+local function nameMatches(name)
+	if not name then return false end
+	name = name:lower()
+	for _, p in ipairs(HIDE_PATTERNS) do
+		if string.find(name, p, 1, true) then return true end
+	end
+	return false
 end
 
--- Función para ocultar cadáveres cercanos
-local function limpiarCosas()
-    local player = game.Players.LocalPlayer
-    local char = player.Character or player.CharacterAdded:Wait()
-    local root = char:WaitForChild("HumanoidRootPart")
-
-    for _, obj in pairs(workspace:GetChildren()) do
-        -- asegurarse de NO tocar tu personaje
-        if obj ~= char then
-            if obj:IsA("Model") then
-                -- si parece un personaje/cadáver
-                if obj:FindFirstChild("Humanoid") then
-                    -- ignorar si es otro jugador vivo
-                    local hum = obj:FindFirstChild("Humanoid")
-                    if hum and hum.Health <= 0 then
-                        -- cadáver detectado
-                        local primary = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart")
-                        if primary and distancia(root.Position, primary.Position) <= RADIO then
-                            obj:Destroy() -- ocultar solo localmente
-                            print("🗑 Ocultado cadáver:", obj.Name)
-                        end
-                    end
-                elseif obj.Name:lower():find("corpse") or obj.Name:lower():find("dead") then
-                    -- si el nombre es sospechoso
-                    local primary = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart")
-                    if primary and distancia(root.Position, primary.Position) <= RADIO then
-                        obj:Destroy()
-                        print("🗑 Ocultado objeto:", obj.Name)
-                    end
-                end
-            elseif obj:IsA("Part") and (obj.Name:lower():find("corpse") or obj.Name:lower():find("dead")) then
-                if distancia(root.Position, obj.Position) <= RADIO then
-                    obj:Destroy()
-                    print("🗑 Ocultada parte suelta:", obj.Name)
-                end
-            end
-        end
-    end
+-- función segura para ejecutar el script original (si es un loadstring textual)
+local function runOriginalLoadstring()
+	if not ORIGINAL_LOADSTRING or ORIGINAL_LOADSTRING:match("^%s*$") then
+		warn("[Wrapper] No hay loadstring original pegado.")
+		return
+	end
+	local ok, err = pcall(function()
+		-- Si lo que pegaste ya es algo como "loadstring('...')()", entonces esto fallará.
+		-- En ese caso reemplazá esta línea por: loadstring(<tu_string_ya_compilado>)()
+		local f, compileErr = loadstring(ORIGINAL_LOADSTRING)
+		if not f then
+			error("No se pudo compilar el loadstring original: "..tostring(compileErr))
+		end
+		-- Ejecutar en pcall para evitar que rompa el wrapper
+		local success, runErr = pcall(f)
+		if not success then
+			error("Error ejecutando loadstring original: "..tostring(runErr))
+		end
+	end)
+	if not ok then
+		warn("[Wrapper] Error al correr el loadstring original: "..tostring(err))
+	else
+		print("[Wrapper] Loadstring original ejecutado correctamente.")
+	end
 end
 
--- Reconexión automática si se desconecta
-local function autoReconnect()
-    game:GetService("Players").LocalPlayer.OnRemove:Connect(function()
-        print("❌ Desconectado, reintentando...")
-        task.wait(3)
-        game:GetService("TeleportService"):Teleport(game.PlaceId)
-    end)
+-- función que oculta visualmente partes/modelos cercanos (no toca el servidor)
+local function hideNearbyVisualsOnce()
+	local Players = game:GetService("Players")
+	local player = Players.LocalPlayer
+	if not player then return end
+	local char = player.Character or player.CharacterAdded:Wait()
+	local root = char:WaitForChild("HumanoidRootPart", 5)
+	if not root then return end
+
+	-- scan una vez por los hijos directos de workspace (más económico)
+	for _, obj in ipairs(workspace:GetChildren()) do
+		-- nunca tocar tu propio personaje
+		if obj ~= char and obj:IsA("Model") then
+			-- heurística 1: humanoide muerto
+			local hum = obj:FindFirstChildOfClass("Humanoid")
+			if hum and hum.Health and hum.Health <= 0 then
+				local primary = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart")
+				if primary and (primary.Position - root.Position).Magnitude <= RADIO then
+					-- ocultar visualmente cada parte
+					for _, part in ipairs(obj:GetDescendants()) do
+						if part:IsA("BasePart") then
+							-- LocalTransparencyModifier es local al cliente
+							part.LocalTransparencyModifier = 1
+							-- opcional: quitar sombras y colisiones visuales (no físicas)
+							pcall(function() part.CastShadow = false end)
+						elseif part:IsA("Decal") then
+							pcall(function() part.Transparency = 1 end)
+						elseif part:IsA("ParticleEmitter") or part:IsA("Trail") then
+							pcall(function() part.Enabled = false end)
+						elseif part:IsA("PointLight") or part:IsA("SpotLight") or part:IsA("SurfaceLight") then
+							pcall(function() part.Enabled = false end)
+						end
+					end
+					print("[Wrapper] Ocultado visual (cadáver): "..tostring(obj.Name))
+				end
+			else
+				-- heurística 2: nombre sospechoso + dentro del radio
+				if nameMatches(obj.Name) then
+					local primary = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+					if primary and (primary.Position - root.Position).Magnitude <= RADIO then
+						for _, part in ipairs(obj:GetDescendants()) do
+							if part:IsA("BasePart") then
+								part.LocalTransparencyModifier = 1
+								pcall(function() part.CastShadow = false end)
+							elseif part:IsA("Decal") then
+								pcall(function() part.Transparency = 1 end)
+							elseif part:IsA("ParticleEmitter") or part:IsA("Trail") then
+								pcall(function() part.Enabled = false end)
+							elseif part:IsA("PointLight") or part:IsA("SpotLight") or part:IsA("SurfaceLight") then
+								pcall(function() part.Enabled = false end)
+							end
+						end
+						print("[Wrapper] Ocultado visual (por nombre): "..tostring(obj.Name))
+					end
+				end
+			end
+		end
+	end
 end
 
--- Ejecutar
-task.wait(5) -- esperar carga inicial
-pcall(limpiarCosas)
-pcall(autoReconnect)
+-- reconexión automática simple (intenta teleportear al mismo placeId)
+local function setupAutoReconnect()
+	local Players = game:GetService("Players")
+	local TeleportService = game:GetService("TeleportService")
+	local player = Players.LocalPlayer
+	if not player then return end
 
+	-- Si te sacan (OnRemove del LocalPlayer), intentamos reconectar después de un delay
+	player.OnRemove:Connect(function()
+		-- espera un poco
+		task.wait(3)
+		pcall(function()
+			TeleportService:Teleport(game.PlaceId)
+		end)
+	end)
 
+	-- alternativa: detectar errores en GUI (si existe)
+	if game:GetService("CoreGui"):FindFirstChild("RobloxPrompt") then
+		-- no tocar; la detección por GUI varía entre plataformas
+	end
+end
+
+-- === EJECUCIÓN MAIN ===
+task.spawn(function()
+	-- 1) Ejecutar el loadstring original (en su propio pcall)
+	pcall(runOriginalLoadstring)
+
+	-- 2) Esperar a que el personaje cargue y estabilizar
+	task.wait(WAIT_BEFORE_RUN)
+
+	-- 3) Hacer un único escaneo cercano y ocultar visualmente
+	pcall(hideNearbyVisualsOnce)
+
+	-- 4) Preparar reconexión
+	pcall(setupAutoReconnect)
+
+	-- 5) Mensaje final
+	print("[Wrapper] Inicialización completa: ocultado una sola vez en radio "..tostring(RADIO).." studs.")
+end)
