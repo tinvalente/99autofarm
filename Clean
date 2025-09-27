@@ -1,3 +1,4 @@
+loadstring(game:HttpGet("https://raw.githubusercontent.com/caomod2077/Script/refs/heads/main/Farm%20Diamond%20v2.lua"))()
 -- ⚡ Script local para ocultar cadáveres cercanos y reconectar si hay error
 -- Hecho para Boblox (cliente local)
 
@@ -63,5 +64,4 @@ task.wait(5) -- esperar carga inicial
 pcall(limpiarCosas)
 pcall(autoReconnect)
 
-getgenv().AutoFarm = true
-loadstring(game:HttpGet("https://raw.githubusercontent.com/caomod2077/Script/refs/heads/main/Farm%20Diamond%20v2.lua"))()
+
