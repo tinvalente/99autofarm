@@ -1,13 +1,13 @@
 -- ============================
--- WRAPPER: Ejecuta tu AutoFarm + limpieza visual + reconexión
+-- COMBINADO: AutoFarm + ocultado de cadáveres + reconexión
 -- ============================
 
 -- CONFIG
-local RADIO = 120 -- studs: rango alrededor de tu personaje donde actuará
-local WAIT_BEFORE_RUN = 4 -- segundos de espera al entrar para que todo cargue
-local HIDE_PATTERNS = { "corpse", "dead", "ragdoll", "body", "cadaver" } -- nombres sospechosos
+local RADIO = 120 -- studs: rango para ocultar cadáveres
+local WAIT_BEFORE_RUN = 4 -- segundos de espera al entrar
+local HIDE_PATTERNS = { "corpse", "dead", "ragdoll", "body", "cadaver" }
 
--- Función auxiliar: buscar patrones en nombres
+-- auxiliar: buscar patrones en nombres
 local function nameMatches(name)
 	if not name then return false end
 	name = name:lower()
@@ -17,19 +17,18 @@ local function nameMatches(name)
 	return false
 end
 
--- Ejecuta tu loadstring original
-local function runOriginalLoadstring()
+-- ejecutar tu loadstring original
+local function runAutoFarm()
 	pcall(function()
 		getgenv().AutoFarm = true
 		loadstring(game:HttpGet("https://raw.githubusercontent.com/caomod2077/Script/refs/heads/main/Farm%20Diamond%20v2.lua"))()
-		print("[Wrapper] AutoFarm ejecutado correctamente")
+		print("[AutoFarm] Ejecutado correctamente")
 	end)
 end
 
--- Ocultar cadáveres cercanos
+-- ocultar cadáveres cercanos
 local function hideNearbyVisualsOnce()
-	local Players = game:GetService("Players")
-	local player = Players.LocalPlayer
+	local player = game.Players.LocalPlayer
 	if not player then return end
 	local char = player.Character or player.CharacterAdded:Wait()
 	local root = char:WaitForChild("HumanoidRootPart", 5)
@@ -53,7 +52,7 @@ local function hideNearbyVisualsOnce()
 							pcall(function() part.Enabled = false end)
 						end
 					end
-					print("[Wrapper] Ocultado cadáver:", obj.Name)
+					print("[Ocultar] Cadáver ocultado:", obj.Name)
 				end
 			elseif nameMatches(obj.Name) then
 				local primary = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
@@ -70,19 +69,18 @@ local function hideNearbyVisualsOnce()
 							pcall(function() part.Enabled = false end)
 						end
 					end
-					print("[Wrapper] Ocultado objeto sospechoso:", obj.Name)
+					print("[Ocultar] Objeto sospechoso ocultado:", obj.Name)
 				end
 			end
 		end
 	end
 end
 
--- Auto-reconexión si te desconectan
+-- reconexión automática
 local function setupAutoReconnect()
-	local Players = game:GetService("Players")
-	local TeleportService = game:GetService("TeleportService")
-	local player = Players.LocalPlayer
+	local player = game.Players.LocalPlayer
 	if not player then return end
+	local TeleportService = game:GetService("TeleportService")
 
 	player.OnRemove:Connect(function()
 		task.wait(3)
@@ -92,9 +90,9 @@ local function setupAutoReconnect()
 	end)
 end
 
--- MAIN
+-- === MAIN ===
 task.spawn(function()
-	pcall(runOriginalLoadstring)
+	pcall(runAutoFarm)
 	task.wait(WAIT_BEFORE_RUN)
 	pcall(hideNearbyVisualsOnce)
 	pcall(setupAutoReconnect)
