@@ -1,100 +1,69 @@
 -- ============================
--- COMBINADO: AutoFarm + ocultado de cadáveres + reconexión
+-- SIMPLE: AutoFarm + Ocultar jugadores muertos + Reconexión
 -- ============================
 
--- CONFIG
-local RADIO = 120 -- studs: rango para ocultar cadáveres
-local WAIT_BEFORE_RUN = 4 -- segundos de espera al entrar
-local HIDE_PATTERNS = { "corpse", "dead", "ragdoll", "body", "cadaver" }
+local RADIO = 100 -- distancia máxima (studs) para escanear cadáveres
+local RECONNECT_DELAY = 10 -- segundos antes de reconectar
 
--- auxiliar: buscar patrones en nombres
-local function nameMatches(name)
-	if not name then return false end
-	name = name:lower()
-	for _, p in ipairs(HIDE_PATTERNS) do
-		if string.find(name, p, 1, true) then return true end
-	end
-	return false
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local player = Players.LocalPlayer
+
+-- Ejecutar tu Diamond Farm
+local function runDiamondFarm()
+    pcall(function()
+        getgenv().AutoFarm = true
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/caomod2077/Script/refs/heads/main/Farm%20Diamond%20v2.lua"))()
+        print("[AutoFarm] Diamond Farm activado")
+    end)
 end
 
--- ejecutar tu loadstring original
-local function runAutoFarm()
-	pcall(function()
-		getgenv().AutoFarm = true
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/caomod2077/Script/refs/heads/main/Farm%20Diamond%20v2.lua"))()
-		print("[AutoFarm] Ejecutado correctamente")
-	end)
+-- Función para calcular distancia
+local function distancia(a, b)
+    return (a - b).Magnitude
 end
 
--- ocultar cadáveres cercanos
-local function hideNearbyVisualsOnce()
-	local player = game.Players.LocalPlayer
-	if not player then return end
-	local char = player.Character or player.CharacterAdded:Wait()
-	local root = char:WaitForChild("HumanoidRootPart", 5)
-	if not root then return end
+-- Ocultar jugadores muertos cercanos
+local function limpiarMuertos()
+    local char = player.Character or player.CharacterAdded:Wait()
+    local root = char:WaitForChild("HumanoidRootPart", 5)
+    if not root then return end
 
-	for _, obj in ipairs(workspace:GetChildren()) do
-		if obj ~= char and obj:IsA("Model") then
-			local hum = obj:FindFirstChildOfClass("Humanoid")
-			if hum and hum.Health and hum.Health <= 0 then
-				local primary = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart")
-				if primary and (primary.Position - root.Position).Magnitude <= RADIO then
-					for _, part in ipairs(obj:GetDescendants()) do
-						if part:IsA("BasePart") then
-							part.LocalTransparencyModifier = 1
-							pcall(function() part.CastShadow = false end)
-						elseif part:IsA("Decal") then
-							pcall(function() part.Transparency = 1 end)
-						elseif part:IsA("ParticleEmitter") or part:IsA("Trail") then
-							pcall(function() part.Enabled = false end)
-						elseif part:IsA("PointLight") or part:IsA("SpotLight") or part:IsA("SurfaceLight") then
-							pcall(function() part.Enabled = false end)
-						end
-					end
-					print("[Ocultar] Cadáver ocultado:", obj.Name)
-				end
-			elseif nameMatches(obj.Name) then
-				local primary = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
-				if primary and (primary.Position - root.Position).Magnitude <= RADIO then
-					for _, part in ipairs(obj:GetDescendants()) do
-						if part:IsA("BasePart") then
-							part.LocalTransparencyModifier = 1
-							pcall(function() part.CastShadow = false end)
-						elseif part:IsA("Decal") then
-							pcall(function() part.Transparency = 1 end)
-						elseif part:IsA("ParticleEmitter") or part:IsA("Trail") then
-							pcall(function() part.Enabled = false end)
-						elseif part:IsA("PointLight") or part:IsA("SpotLight") or part:IsA("SurfaceLight") then
-							pcall(function() part.Enabled = false end)
-						end
-					end
-					print("[Ocultar] Objeto sospechoso ocultado:", obj.Name)
-				end
-			end
-		end
-	end
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj:IsA("Model") and obj ~= char then
+            local hum = obj:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health and hum.Health <= 0 then
+                local primary = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart")
+                if primary and distancia(root.Position, primary.Position) <= RADIO then
+                    -- ocultar localmente
+                    for _, part in ipairs(obj:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.LocalTransparencyModifier = 1
+                        end
+                    end
+                    print("[Ocultar] Jugador muerto ocultado:", obj.Name)
+                end
+            end
+        end
+    end
 end
 
--- reconexión automática
-local function setupAutoReconnect()
-	local player = game.Players.LocalPlayer
-	if not player then return end
-	local TeleportService = game:GetService("TeleportService")
-
-	player.OnRemove:Connect(function()
-		task.wait(3)
-		pcall(function()
-			TeleportService:Teleport(game.PlaceId)
-		end)
-	end)
+-- Reconexión automática
+local function setupReconnect()
+    player.OnRemove:Connect(function()
+        print("[Reconectar] Desconectado, esperando "..RECONNECT_DELAY.."s...")
+        task.wait(RECONNECT_DELAY)
+        pcall(function()
+            TeleportService:Teleport(game.PlaceId)
+        end)
+    end)
 end
 
--- === MAIN ===
+-- MAIN
 task.spawn(function()
-	pcall(runAutoFarm)
-	task.wait(WAIT_BEFORE_RUN)
-	pcall(hideNearbyVisualsOnce)
-	pcall(setupAutoReconnect)
-	print("[Wrapper] Inicialización completa")
+    task.wait(5) -- esperar a que el personaje cargue
+    runDiamondFarm()
+    limpiarMuertos()
+    setupReconnect()
+    print("[Wrapper] Inicialización completa")
 end)
