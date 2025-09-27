@@ -1,0 +1,64 @@
+-- ⚡ Script local para ocultar cadáveres cercanos y reconectar si hay error
+-- Hecho para Boblox (cliente local)
+
+-- CONFIG
+local RADIO = 120 -- distancia máxima para ocultar cosas (studs)
+
+-- Función para calcular distancia
+local function distancia(a, b)
+    return (a - b).Magnitude
+end
+
+-- Función para ocultar cadáveres cercanos
+local function limpiarCosas()
+    local player = game.Players.LocalPlayer
+    local char = player.Character or player.CharacterAdded:Wait()
+    local root = char:WaitForChild("HumanoidRootPart")
+
+    for _, obj in pairs(workspace:GetChildren()) do
+        -- asegurarse de NO tocar tu personaje
+        if obj ~= char then
+            if obj:IsA("Model") then
+                -- si parece un personaje/cadáver
+                if obj:FindFirstChild("Humanoid") then
+                    -- ignorar si es otro jugador vivo
+                    local hum = obj:FindFirstChild("Humanoid")
+                    if hum and hum.Health <= 0 then
+                        -- cadáver detectado
+                        local primary = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart")
+                        if primary and distancia(root.Position, primary.Position) <= RADIO then
+                            obj:Destroy() -- ocultar solo localmente
+                            print("🗑 Ocultado cadáver:", obj.Name)
+                        end
+                    end
+                elseif obj.Name:lower():find("corpse") or obj.Name:lower():find("dead") then
+                    -- si el nombre es sospechoso
+                    local primary = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart")
+                    if primary and distancia(root.Position, primary.Position) <= RADIO then
+                        obj:Destroy()
+                        print("🗑 Ocultado objeto:", obj.Name)
+                    end
+                end
+            elseif obj:IsA("Part") and (obj.Name:lower():find("corpse") or obj.Name:lower():find("dead")) then
+                if distancia(root.Position, obj.Position) <= RADIO then
+                    obj:Destroy()
+                    print("🗑 Ocultada parte suelta:", obj.Name)
+                end
+            end
+        end
+    end
+end
+
+-- Reconexión automática si se desconecta
+local function autoReconnect()
+    game:GetService("Players").LocalPlayer.OnRemove:Connect(function()
+        print("❌ Desconectado, reintentando...")
+        task.wait(3)
+        game:GetService("TeleportService"):Teleport(game.PlaceId)
+    end)
+end
+
+-- Ejecutar
+task.wait(5) -- esperar carga inicial
+pcall(limpiarCosas)
+pcall(autoReconnect)
